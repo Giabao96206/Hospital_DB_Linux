@@ -1,0 +1,90 @@
+# ==============================================================================
+# HAPROXY CONFIGURATION FOR HOSPITAL HA CLUSTER (TRÊN APP1 - TAILSCALE)
+# Đường dẫn triển khai trên máy APP1: /etc/haproxy/haproxy.cfg
+# Chức năng: Định tuyến truy vấn PostgreSQL động tới Primary hiện tại qua Patroni REST API
+# ==============================================================================
+
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    chroot /var/lib/haproxy
+    user haproxy
+    group haproxy
+    daemon
+    stats socket /run/haproxy/admin.sock mode 660 level admin expose-fd listeners
+    stats timeout 30s
+    maxconn 4000
+
+defaults
+    log     global
+    mode    tcp
+    option  tcplog
+    option  dontlognull
+    retries 3
+    timeout queue           1m
+    timeout connect         4s
+    timeout client          30m
+    timeout server          30m
+    timeout check           2s
+
+# ------------------------------------------------------------------------------
+# 1. HAPROXY STATS DASHBOARD & METRICS (TAILSCALE MESH)
+# ------------------------------------------------------------------------------
+listen stats
+    mode http
+    bind 127.0.0.1:7000
+    bind 100.99.89.64:7000
+    stats enable
+    stats uri /
+    stats refresh 3s
+    stats show-node
+    stats auth admin:Hospital@2026!Stats
+    # Prometheus exporter endpoint tích hợp
+    http-request use-service prometheus-exporter if { path /metrics }
+
+# ------------------------------------------------------------------------------
+# 2. FRONTEND & BACKEND: POSTGRESQL PRIMARY (READ-WRITE ROUTING - PORT 5000)
+# Chỉ cho phép gửi kết nối ghi tới Node hiện đang giữ vai trò PRIMARY
+# ------------------------------------------------------------------------------
+frontend postgres_primary_front
+    bind 127.0.0.1:5000
+    bind 100.99.89.64:5000
+    mode tcp
+    option tcplog
+    default_backend postgres_primary_back
+
+backend postgres_primary_back
+    mode tcp
+    # Kiểm tra trạng thái Primary thông qua Patroni REST API (HTTP GET /primary)
+    # Patroni trả về HTTP 200 OK chỉ trên Primary; trả về HTTP 503 trên Standby
+    option httpchk GET /primary
+    http-check expect status 200
+    # on-marked-down shutdown-sessions: Ngắt ngay lập tức mọi TCP connection khi node bị giáng cấp hoặc crash
+    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+    
+    server db1 100.115.205.94:5432 maxconn 100 check port 8008
+    server db2 100.97.242.2:5432 maxconn 100 check port 8008
+    server db3 100.67.87.46:5432 maxconn 100 check port 8008
+
+# ------------------------------------------------------------------------------
+# 3. FRONTEND & BACKEND: POSTGRESQL REPLICAS (READ-ONLY LOAD BALANCING - PORT 5001)
+# Cân bằng tải các truy vấn đọc (báo cáo, dashboard) tới các Standby
+# ------------------------------------------------------------------------------
+frontend postgres_replicas_front
+    bind 127.0.0.1:5001
+    bind 100.99.89.64:5001
+    mode tcp
+    option tcplog
+    default_backend postgres_replicas_back
+
+backend postgres_replicas_back
+    mode tcp
+    balance roundrobin
+    # Patroni REST API trả về HTTP 200 OK trên các Replicas (/replica)
+    option httpchk GET /replica
+    http-check expect status 200
+    default-server inter 3s fall 3 rise 2
+    
+    server db1 100.115.205.94:5432 maxconn 100 check port 8008
+    server db2 100.97.242.2:5432 maxconn 100 check port 8008
+    server db3 100.67.87.46:5432 maxconn 100 check port 8008

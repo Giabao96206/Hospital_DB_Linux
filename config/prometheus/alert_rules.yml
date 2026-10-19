@@ -1,0 +1,67 @@
+# ==============================================================================
+# PROMETHEUS ALERT RULES: HOSPITAL DATABASE HA CLUSTER
+# Đường dẫn triển khai: /etc/prometheus/alert_rules.yml
+# ==============================================================================
+
+groups:
+  - name: hospital_ha_alerts
+    rules:
+      # 1. CẢNH BÁO MẤT NODE HỆ THỐNG
+      - alert: NodeExporterDown
+        expr: up{job="node_exporter"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Máy chủ {{ $labels.instance }} ngừng hoạt động"
+          description: "Không thể thu thập số liệu node_exporter từ máy {{ $labels.instance }} trong hơn 30 giây."
+
+      # 2. CẢNH BÁO KHÔNG CÓ HOẶC CÓ NHIỀU HƠN 1 PRIMARY (SPLIT-BRAIN CHECK)
+      - alert: ClusterPrimaryCountMismatch
+        expr: count(patroni_is_leader == 1) != 1
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Bất thường vai trò Primary trong cụm PostgreSQL Patroni"
+          description: "Số lượng node Primary hiện tại không bằng 1! Có thể cụm đang trong quá trình failover hoặc bị split-brain."
+
+      # 3. CẢNH BÁO ĐỘ TRỄ STREAMING REPLICATION QUÁ CAO (RPO AT RISK)
+      - alert: HighReplicationLagBytes
+        expr: pg_stat_replication_pg_wal_lsn_diff > 10485760 # > 10MB
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Độ trễ replication vượt mức an toàn trên {{ $labels.instance }}"
+          description: "Replication lag đang vượt quá 10MB WAL. Nguy cơ tăng RPO khi xảy ra sự cố."
+
+      # 4. CẢNH BÁO ETCD QUORUM BỊ ĐE DỌA
+      - alert: EtcdQuorumDegraded
+        expr: count(up{job="etcd"} == 1) < 2
+        for: 15s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Cụm etcd mất Quorum"
+          description: "Chỉ còn dưới 2 thành viên etcd hoạt động. Patroni sẽ không thể ghi DCS và cụm rơi vào chế độ Read-Only."
+
+      # 5. CẢNH BÁO DUNG LƯỢNG Ổ ĐĨA DỮ LIỆU/WAL SẮP HẾT
+      - alert: DiskSpaceCriticallyLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dung lượng ổ đĩa dưới 15% trên {{ $labels.instance }}"
+          description: "Ổ đĩa máy {{ $labels.instance }} còn ít hơn 15% dung lượng trống. Nguy cơ PostgreSQL bị dừng khẩn cấp do tràn đĩa."
+
+      # 6. CẢNH BÁO HAPROXY KHÔNG THẤY PRIMARY NÀO KHẢ DỤNG
+      - alert: HAProxyNoAvailablePrimary
+        expr: haproxy_backend_active_servers{proxy="postgres_primary_back"} == 0
+        for: 5s
+        labels:
+          severity: critical
+        annotations:
+          summary: "HAProxy không tìm thấy PostgreSQL Primary hợp lệ"
+          description: "Ứng dụng viện phí không thể thực hiện truy vấn ghi. Kiểm tra ngay trạng thái Patroni và PostgreSQL."

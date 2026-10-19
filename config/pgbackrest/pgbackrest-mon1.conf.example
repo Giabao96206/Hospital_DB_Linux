@@ -1,0 +1,34 @@
+# ==============================================================================
+# PGBACKREST SERVER CONFIGURATION FOR MON1 (CENTRAL REPO - TAILSCALE)
+# Đường dẫn triển khai trên máy MON1: /etc/pgbackrest.conf
+# Quyền sở hữu: chown postgres:postgres /etc/pgbackrest.conf && chmod 640
+# ==============================================================================
+
+[global]
+repo1-path=/var/lib/pgbackrest
+repo1-retention-full=2           # Giữ 2 bản full backup gần nhất
+repo1-retention-diff=7           # Giữ 7 bản differential backup
+repo1-retention-archive=2        # Tự động nén và dọn dẹp WAL archive theo bản full
+process-max=2                    # Số luồng nén & sao lưu song song
+log-level-console=info
+log-level-file=detail
+start-fast=y                     # Ép checkpoint nhanh khi bắt đầu sao lưu
+compress-type=lz4                # Thuật toán nén lz4 nhanh, tối ưu CPU trong lab
+
+# Định nghĩa Stanza cho cụm CSDL bệnh viện kết nối qua mạng Tailscale
+# pgBackRest tự động nhận diện node nào đang là Primary để thực hiện backup!
+[hospital_cluster]
+pg1-host=100.115.205.94
+pg1-host-user=postgres
+pg1-path=/var/lib/postgresql/14/main
+pg1-user=postgres
+
+pg2-host=100.97.242.2
+pg2-host-user=postgres
+pg2-path=/var/lib/postgresql/14/main
+pg2-user=postgres
+
+pg3-host=100.67.87.46
+pg3-host-user=postgres
+pg3-path=/var/lib/postgresql/14/main
+pg3-user=postgres

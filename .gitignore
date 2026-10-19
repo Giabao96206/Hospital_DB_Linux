@@ -1,0 +1,44 @@
+# Environment and Secret Files
+.env
+.env.local
+*.key
+*.pem
+*.pfx
+id_rsa
+id_rsa.pub
+known_hosts
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+app/node_modules/
+
+# Logs
+logs/
+*.log
+/var/log/
+pgbackrest.log
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# Backup and dump files
+*.sql.gz
+*.tar.gz
+*.backup
+/backups/
+/var/lib/pgbackrest/*
+!/var/lib/pgbackrest/.gitkeep
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Test outputs
+tests/results/*.log
+tests/results/*.csv

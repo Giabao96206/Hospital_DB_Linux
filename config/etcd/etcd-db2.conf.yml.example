@@ -1,0 +1,21 @@
+# ==============================================================================
+# ETCD V3 CONFIGURATION FOR DB2 (MEMBER 2 - TAILSCALE)
+# Đường dẫn triển khai trên máy DB2: /etc/etcd/etcd.conf.yml
+# Quorum yêu cầu: 2/3 members hoạt động bình thường
+# ==============================================================================
+
+name: 'db2'
+data-dir: '/var/lib/etcd/hospital-ha.etcd'
+listen-peer-urls: 'http://100.97.242.2:2380'
+listen-client-urls: 'http://100.97.242.2:2379,http://127.0.0.1:2379'
+initial-advertise-peer-urls: 'http://100.97.242.2:2380'
+advertise-client-urls: 'http://100.97.242.2:2379'
+initial-cluster: 'db1=http://100.115.205.94:2380,db2=http://100.97.242.2:2380,db3=http://100.67.87.46:2380'
+initial-cluster-token: 'etcd-hospital-tailscale-token'
+initial-cluster-state: 'new'
+
+auto-compaction-retention: '1'
+snapshot-count: 10000
+heartbeat-interval: 250
+election-timeout: 1250
+quota-backend-bytes: 2147483648

@@ -1,0 +1,87 @@
+# ==============================================================================
+# PATRONI CONFIGURATION TEMPLATE FOR DB2 (STANDBY 1 - TAILSCALE)
+# Đường dẫn cài đặt trên máy DB2: /etc/patroni/patroni.yml
+# Phân quyền tệp tin bắt buộc: chown postgres:postgres /etc/patroni/patroni.yml && chmod 600
+# ==============================================================================
+
+scope: hospital-ha-cluster
+namespace: /service
+name: db2
+
+restapi:
+  listen: 100.97.242.2:8008
+  connect_address: 100.97.242.2:8008
+
+etcd3:
+  hosts:
+    - 100.115.205.94:2379
+    - 100.97.242.2:2379
+    - 100.67.87.46:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: false
+    synchronous_mode_strict: false
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        shared_buffers: 256MB
+        work_mem: 16MB
+        maintenance_work_mem: 64MB
+        wal_level: replica
+        max_wal_size: 2GB
+        min_wal_size: 512MB
+        wal_keep_size: 1024MB
+        max_wal_senders: 10
+        max_replication_slots: 10
+        hot_standby: "on"
+        wal_log_hints: "on"
+        archive_mode: "on"
+        archive_command: "pgbackrest --stanza=hospital_cluster archive-push %p"
+        archive_timeout: 300
+        password_encryption: scram-sha-256
+        logging_collector: "on"
+        log_directory: "log"
+        log_filename: "postgresql-%Y-%m-%d_%H%M%S.log"
+        log_min_messages: "warning"
+        log_min_error_statement: "error"
+        log_line_prefix: "%m [%p] %q%u@%d "
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+    - auth-host: scram-sha-256
+    - auth-local: trust
+  pg_hba:
+    - host replication replicator 100.64.0.0/10 scram-sha-256
+    - host all all 127.0.0.1/32 scram-sha-256
+    - host all all 100.64.0.0/10 scram-sha-256
+    - local all all trust
+  users:
+    admin:
+      password: CHANGE_ME_POSTGRES_SECRET_2026
+      options:
+        - superuser
+
+postgresql:
+  listen: 100.97.242.2:5432,127.0.0.1:5432
+  connect_address: 100.97.242.2:5432
+  data_dir: /var/lib/postgresql/14/main
+  bin_dir: /usr/lib/postgresql/14/bin
+  pgpass: /var/lib/postgresql/.pgpass
+  authentication:
+    replication:
+      username: replicator
+      password: CHANGE_ME_REPL_SECRET_2026
+    superuser:
+      username: postgres
+      password: CHANGE_ME_POSTGRES_SECRET_2026
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  nosync: false

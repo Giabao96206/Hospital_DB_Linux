@@ -1,0 +1,58 @@
+# ==============================================================================
+# PROMETHEUS CONFIGURATION FOR HOSPITAL HA MONITORING (TAILSCALE MESH)
+# Đường dẫn triển khai: /etc/prometheus/prometheus.yml
+# ==============================================================================
+
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+  scrape_timeout: 4s
+
+rule_files:
+  - "/etc/prometheus/alert_rules.yml"
+
+scrape_configs:
+  # 1. Giám sát tài nguyên hệ điều hành (CPU, RAM, Disk, Network) của 5 máy qua Tailscale
+  - job_name: "node_exporter"
+    static_configs:
+      - targets:
+          - "100.115.205.94:9100" # DB1
+          - "100.97.242.2:9100"   # DB2
+          - "100.67.87.46:9100"   # DB3
+          - "100.99.89.64:9100"   # APP1
+          - "100.87.112.76:9100"  # MON1
+        labels:
+          environment: "tailscale-lab"
+
+  # 2. Giám sát Patroni HA REST API (Cung cấp metrics native qua endpoint /metrics)
+  - job_name: "patroni"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets:
+          - "100.115.205.94:8008"
+          - "100.97.242.2:8008"
+          - "100.67.87.46:8008"
+
+  # 3. Giám sát etcd Quorum & Raft Consensus (Cung cấp metrics native qua port 2379)
+  - job_name: "etcd"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets:
+          - "100.115.205.94:2379"
+          - "100.97.242.2:2379"
+          - "100.67.87.46:2379"
+
+  # 4. Giám sát PostgreSQL Metrics chuyên sâu (Transactions, Queries, Lag, Connections)
+  - job_name: "postgres_exporter"
+    static_configs:
+      - targets:
+          - "100.115.205.94:9187"
+          - "100.97.242.2:9187"
+          - "100.67.87.46:9187"
+
+  # 5. Giám sát HAProxy (Định tuyến Primary và Replicas trên APP1)
+  - job_name: "haproxy"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets:
+          - "100.99.89.64:7000"
